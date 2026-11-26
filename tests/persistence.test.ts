@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { beforeEach,afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +6,7 @@ import { closeDb, load, openDb, save } from "../persist";
 import { db, reset } from "../store";
 
 let testDirectory: string | undefined;
-
+beforeEach(reset);
 afterEach(async () => {
   closeDb();
   reset();
@@ -16,6 +16,7 @@ afterEach(async () => {
 
 describe("SQLite persistence", () => {
   test("load returns false for a new empty database", async () => {
+    reset();
     testDirectory = await mkdtemp(join(tmpdir(), "ciwt-persist-"));
     openDb(join(testDirectory, "test.db"));
 
