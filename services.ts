@@ -2,7 +2,7 @@ import { db, today, nextIssueId, nextWoId, type User, type UserRec, type Issue, 
 export type { User };
 
 export class HttpError extends Error { constructor(public status: number, m: string) { super(m); } }
-export const need = (c: unknown, s: number, m: string): asserts c => { if (!c) throw new HttpError(s, m); };
+export const need: (c: unknown, s: number, m: string) => asserts c = (c, s, m) => { if (!c) throw new HttpError(s, m); };
 
 /* Business rules + status transitions. Each function validates first and mutates only after every check
    passes (and the server is single-threaded), so a rejected request never leaves partial changes. */

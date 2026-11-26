@@ -8,7 +8,11 @@ repair until it is resolved. Bun + TypeScript + SQLite, no build step.
 
     bun install
     bun run dev        # http://localhost:3000
-    bun test           # 12 status-transition tests
+    bun test           # workflow and SQLite persistence tests
+
+Tests cover issue/work-order status transitions, ownership checks, rejected requests leaving data unchanged,
+and saving/reloading records through a separate temporary SQLite database. They do not use or modify the
+project's `ciwt.db`. GitHub Actions runs `bun test` on pushes and pull requests.
 
 Accounts: `admin@nitc.ac.in` / `admin123` · `aarav|kiran|meera@nitc.ac.in` / `user123`.
 
@@ -63,7 +67,8 @@ navigable without a router library.
 | `store.ts` | domain types, in-memory working store, ID sequences, demo seed | 85 |
 | `services.ts` | business rules and status transitions | 72 |
 | `server.ts` | HTTP routes, sessions, CSRF origin check, Zod validation, photo storage | 164 |
-| `tests/transitions.test.ts` | status-transition and ownership tests (no database needed) | 72 |
+| `tests/transitions.test.ts` | issue/work-order transition, ownership and rejected-request tests | — |
+| `tests/persistence.test.ts` | SQLite save/load and restart tests using a temporary database | — |
 | `public/index.html` | the Resolve UI, talking to `/api/*` | 235 |
 | `CIWT-Project-Guide.pdf` | full project report: architecture, SRS mapping, viva Q&A | — |
 
