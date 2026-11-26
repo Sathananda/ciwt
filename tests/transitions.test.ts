@@ -37,6 +37,11 @@ describe("valid transitions", () => {
     const id = mkIssue(), w = svc.createWO(id, wod()); svc.updateWO(w.work_order_id, { priority: "LOW", progress: "Parts ordered" });
     expect(wo(id)!.priority).toBe("LOW"); expect(db.updates.length).toBe(1); expect(db.notes.length).toBe(2);
   });
+  test("closing an issue preserves supplied feedback", () => {
+    const id = mkIssue(); svc.close(id, "All done");
+    expect(issue(id).status).toBe("CLOSED");
+    expect(issue(id).closure_feedback).toBe("All done");
+  });
 });
 
 describe("invalid transitions", () => {
@@ -68,5 +73,21 @@ describe("rejected requests leave no partial changes", () => {
   });
   test("IN_PROGRESS issue without an active work order: resolve fails and status is unchanged", () => {
     const id = mkIssue("IN_PROGRESS"); fails(() => svc.resolve(id, owner), 400); expect(issue(id).status).toBe("IN_PROGRESS");
+  });
+  test("past deadline update changes nothing", () => {
+    const id = mkIssue();
+    const w = svc.createWO(id, wod());
+    const notesBefore = db.notes.length;
+
+    fails(() => svc.updateWO(w.work_order_id, {
+      deadline: addDays(-1),
+      priority: "LOW",
+      progress: "Should not be saved",
+    }), 400);
+
+    expect(wo(id)!.deadline).toBe(w.deadline);
+    expect(wo(id)!.priority).toBe("HIGH");
+    expect(db.updates.length).toBe(0);
+    expect(db.notes.length).toBe(notesBefore);
   });
 });

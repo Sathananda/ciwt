@@ -34,15 +34,20 @@ const TABLES: [string, keyof typeof db, string[]][] = [   // parents first
   ["notifications", "notes", ["notification_id", "user_id", "issue_id", "message", "is_read", "created_at"]],
 ];
 const DATES = ["submitted_at", "created_at", "updated_at"];
-let sqlite: Database;
+let sqlite: Database | undefined;
 
 export function openDb(file = process.env.DB_FILE ?? "ciwt.db") {
   sqlite = new Database(file, { create: true });
   sqlite.exec("pragma journal_mode=wal; pragma foreign_keys=on;");
   sqlite.exec(SCHEMA);
 }
+export function closeDb() {
+  sqlite?.close();
+  sqlite = undefined;
+}
 /** Fill the in-memory store from the file. Returns false when the database is empty (first run). */
 export function load(): boolean {
+  if (!sqlite) throw new Error("Database is not open");
   if (!(sqlite.query("select count(*) n from users").get() as any).n) return false;
   for (const [t, k] of TABLES) (db[k] as any[]).push(...sqlite.query(`select * from ${t}`).all().map((r: any) => {
     for (const c of DATES) if (c in r) r[c] = new Date(r[c]);
@@ -54,6 +59,7 @@ export function load(): boolean {
 }
 /** Write everything in a single transaction (all-or-nothing). */
 export function save() {
+  if (!sqlite) throw new Error("Database is not open");
   sqlite.transaction(() => {
     for (const [t] of [...TABLES].reverse()) sqlite.exec(`delete from ${t}`);
     for (const [t, k, cols] of TABLES) {
