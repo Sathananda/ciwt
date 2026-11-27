@@ -34,39 +34,46 @@ const TABLES: [string, keyof typeof db, string[]][] = [   // parents first
   ["notifications", "notes", ["notification_id", "user_id", "issue_id", "message", "is_read", "created_at"]],
 ];
 const DATES = ["submitted_at", "created_at", "updated_at"];
-let sqlite: Database | undefined;
+/** A row as SQLite returns it; the column names come from TABLES, so values are hydrated back into the store. */
+type Row = Record<string, unknown>;
+let sqlite: Database;
 
 export function openDb(file = process.env.DB_FILE ?? "ciwt.db") {
   sqlite = new Database(file, { create: true });
-  sqlite.exec("pragma journal_mode=wal; pragma foreign_keys=on;");
+  // WAL for concurrent readers, busy_timeout so a second writer waits instead of failing with SQLITE_BUSY
+  sqlite.exec("pragma journal_mode=wal; pragma foreign_keys=on; pragma busy_timeout=5000;");
   sqlite.exec(SCHEMA);
-}
-export function closeDb() {
-  sqlite?.close();
-  sqlite = undefined;
 }
 /** Fill the in-memory store from the file. Returns false when the database is empty (first run). */
 export function load(): boolean {
-  if (!sqlite) throw new Error("Database is not open");
-  if (!(sqlite.query("select count(*) n from users").get() as any).n) return false;
-  for (const [t, k] of TABLES) (db[k] as any[]).push(...sqlite.query(`select * from ${t}`).all().map((r: any) => {
-    for (const c of DATES) if (c in r) r[c] = new Date(r[c]);
-    if ("is_read" in r) r.is_read = !!r.is_read;
-    return r;
-  }));
-  for (const m of sqlite.query("select * from meta").all() as any[]) (db as any)[m.key] = m.value;
+  const { n } = sqlite.query("select count(*) n from users").get() as { n: number };
+  if (!n) return false;
+  for (const [t, k] of TABLES) {
+    const rows = sqlite.query(`select * from ${t}`).all() as Row[];
+    (db[k] as unknown[]).push(...rows.map(r => {
+      for (const c of DATES) if (c in r) r[c] = new Date(r[c] as string);
+      if ("is_read" in r) r.is_read = !!r.is_read;
+      return r;
+    }));
+  }
+  for (const m of sqlite.query("select * from meta").all() as { key: string; value: number }[])
+    (db as unknown as Record<string, number>)[m.key] = m.value;
   return true;
 }
 /** Write everything in a single transaction (all-or-nothing). */
 export function save() {
-  if (!sqlite) throw new Error("Database is not open");
   sqlite.transaction(() => {
     for (const [t] of [...TABLES].reverse()) sqlite.exec(`delete from ${t}`);
     for (const [t, k, cols] of TABLES) {
       const st = sqlite.prepare(`insert into ${t}(${cols.join(",")}) values(${cols.map(() => "?").join(",")})`);
-      for (const r of db[k] as any[]) st.run(...cols.map(c => r[c] instanceof Date ? r[c].toISOString() : typeof r[c] === "boolean" ? +r[c] : r[c] ?? null));
+      for (const r of db[k] as Record<string, unknown>[])
+        st.run(...cols.map((c): string | number | null => {
+          const v = r[c];
+          return v instanceof Date ? v.toISOString() : typeof v === "boolean" ? +v : (v as string | number | null) ?? null;   // booleans become 0/1, Dates ISO text
+        }));
     }
     sqlite.exec("delete from meta");
-    for (const k of ["iseq", "wseq"] as const) sqlite.prepare("insert into meta values(?,?)").run(k, db[k]);
+    const meta = sqlite.prepare("insert into meta values(?,?)");
+    for (const k of ["iseq", "wseq"] as const) meta.run(k, db[k]);
   })();
 }
