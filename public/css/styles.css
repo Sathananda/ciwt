@@ -1,0 +1,33 @@
+html {
+  font-size: 150%; /* 20px root: every rem-based Tailwind size, spacing and max-w-* scales with it. Raise further for bigger. */
+}
+
+:root {
+  color-scheme: dark;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  background: #000;
+  color: #f1f1f5;
+  font-family: Outfit, Inter, system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+.g {
+  background: linear-gradient(90deg, #a78bfa, #f0abfc);
+}
+
+.gt {
+  background: linear-gradient(90deg, #a78bfa, #f0abfc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid #f0abfc;
+  outline-offset: 2px;
+}
