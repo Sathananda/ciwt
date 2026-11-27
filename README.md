@@ -14,7 +14,7 @@ Tests cover issue/work-order status transitions, ownership checks, rejected requ
 and saving/reloading records through a separate temporary SQLite database. They do not use or modify the
 project's `ciwt.db`. GitHub Actions runs `bun test` on pushes and pull requests.
 
-Accounts: `admin@nitc.ac.in` / `admin123` · `aarav|kiran|meera@nitc.ac.in` / `user123`.
+
 
 **Database:** SQLite (`bun:sqlite`, built into Bun — nothing to install). On first start the server creates
 `ciwt.db` and fills it with demo data (1 admin, 3 users, 127 issues, 65 work orders). Every change is saved
@@ -87,7 +87,4 @@ dashboard's "Active Issues" tile is labelled as a ratio rather than "pending iss
 `SESSION_SECRET` (otherwise a random per-boot secret), `UPLOAD_DIR` (default `./uploads`), `PORT` (3000),
 `DB_FILE` (default `ciwt.db`). Set `NODE_ENV=production` behind HTTPS so the session cookie is marked `Secure`.
 
-## Notes for evaluation
 
-The full report — module inventory, design-to-implementation mapping, request lifecycle, rubric mapping and
-answers to the eight viva questions — is in `CIWT-Project-Guide.pdf`. `ciwt.zip` holds the source archive.
