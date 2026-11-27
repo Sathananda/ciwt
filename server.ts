@@ -16,13 +16,15 @@ const json = (d: unknown, s = 200, h: HeadersInit = {}) => Response.json(d, { st
 const IDLE_MS = 30 * 60 * 1000;
 const th = (t: string) => new Bun.CryptoHasher("sha256").update(SECRET + t).digest("hex");
 const cookie = (t: string, age: number) => `sid=${t}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${PROD ? "; Secure" : ""}`;
+/** The session token from the request cookie (the cookie store is HttpOnly, so JS never sees it). */
+const sid = (req: Request) => req.headers.get("cookie")?.match(/(?:^|; )sid=([^;]+)/)?.[1] ?? null;
 
 const CATS = ["ELECTRICAL", "PLUMBING", "FURNITURE", "CLEANING", "NETWORK", "OTHERS"] as const;
 const PRI = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const, STAT = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const;
 
 /* ---- auth: sliding 30-minute idle session (held in memory) ---- */
 function auth(req: Request): User | null {
-  const tok = req.headers.get("cookie")?.match(/(?:^|; )sid=([^;]+)/)?.[1]; if (!tok) return null;
+  const tok = sid(req); if (!tok) return null;
   const id = th(tok), s = db.sessions.get(id), now = Date.now();
   if (!s || s.expires < now || now - s.last > IDLE_MS) { db.sessions.delete(id); return null; }
   s.last = now; const u = db.users.find(x => x.user_id === s.user_id); return u ? publicUser(u) : null;
@@ -56,9 +58,11 @@ async function savePhotos(files: File[]) {
 /* ---- routes ---- */
 type Ctx = { req: Request; url: URL; user: User; p: Record<string, string> };
 type Role = "public" | "any" | User["role"];
-const routes: [string, RegExp, Role, (c: Ctx) => Promise<Response> | Response][] = [];
-const route = (m: string, path: string, role: Role, h: (c: Ctx) => Promise<Response> | Response) =>
-  routes.push([m, new RegExp("^" + path.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), role, h]);
+type Handler = (c: Ctx) => Promise<Response> | Response;
+type Route = { method: string; pattern: RegExp; role: Role; handler: Handler };
+const routes: Route[] = [];
+const route = (method: string, path: string, role: Role, handler: Handler) =>
+  routes.push({ method, pattern: new RegExp("^" + path.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), role, handler });
 const body = (c: Ctx) => c.req.json().catch(() => null);
 
 const byNew = (a: { submitted_at: Date }, b: { submitted_at: Date }) => +b.submitted_at - +a.submitted_at;
@@ -74,7 +78,7 @@ route("POST", "/api/login", "public", async c => {
   return json({ user: publicUser(u) }, 200, { "set-cookie": cookie(tok, 43200) });
 });
 route("POST", "/api/logout", "public", c => {
-  const tok = c.req.headers.get("cookie")?.match(/(?:^|; )sid=([^;]+)/)?.[1]; if (tok) db.sessions.delete(th(tok));
+  const tok = sid(c.req); if (tok) db.sessions.delete(th(tok));
   return json({ ok: true }, 200, { "set-cookie": cookie("", 0) });
 });
 route("GET", "/api/me", "any", c => json({ user: c.user }));
@@ -146,11 +150,12 @@ Bun.serve({
     if (!url.pathname.startsWith("/api/")) return new Response(Bun.file("public/index.html"));
     try {
       if (req.method !== "GET") { const o = req.headers.get("origin"); need(!o || new URL(o).host === req.headers.get("host"), 403, "Cross-origin request blocked"); }  // CSRF
-      for (const [m, re, role, h] of routes) {
-        const mt = m === req.method && re.exec(url.pathname); if (!mt) continue;
-        let user = null as User | null;
-        if (role !== "public") { user = await auth(req); need(user, 401, "Please log in again"); need(role === "any" || user.role === role, 403, "You do not have access to this action"); }
-        const res = await h({ req, url, user: user as User, p: mt.groups ?? {} });
+      for (const r of routes) {
+        if (r.method !== req.method) continue;
+        const mt = r.pattern.exec(url.pathname); if (!mt) continue;
+        let user: User | null = null;
+        if (r.role !== "public") { user = await auth(req); need(user, 401, "Please log in again"); need(r.role === "any" || user.role === r.role, 403, "You do not have access to this action"); }
+        const res = await r.handler({ req, url, user: user as User, p: mt.groups ?? {} });
         if (req.method !== "GET" && !/\/api\/(login|logout)$/.test(url.pathname)) save();   // persist every successful change
         return res;
       }
